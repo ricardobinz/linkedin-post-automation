@@ -1,0 +1,26 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/
+.DS_Store
+
+# Backend
+backend/dist/
+backend/data/
+backend/.env
+
+# Python Backend
+backend-py/.venv/
+backend-py/__pycache__/
+backend-py/.env
+backend-py/data/
