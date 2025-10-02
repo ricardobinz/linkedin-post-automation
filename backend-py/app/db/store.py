@@ -19,14 +19,20 @@ def _ensure_file(path: Path, default: str) -> None:
 
 def _read_json(path: Path, fallback: Any) -> Any:
     _ensure_file(path, json.dumps(fallback))
+    print(f"[STORE] Reading JSON from {path}")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        print(f"[STORE] Read OK from {path}")
+        return data
     except Exception:
+        print(f"[STORE] Failed reading {path}, returning fallback.")
         return fallback
 
 
 def _write_json(path: Path, data: Any) -> None:
+    print(f"[STORE] Writing JSON to {path}")
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"[STORE] Write complete to {path}")
 
 
 def _now_iso() -> str:
@@ -36,6 +42,7 @@ def _now_iso() -> str:
 class PostsStore:
     @staticmethod
     def get_all(status: Optional[PostStatus] = None) -> List[Post]:
+        print("[STORE] PostsStore.get_all called")
         raw = _read_json(POSTS_PATH, [])
         items: List[Post] = []
         for obj in raw:
@@ -44,34 +51,45 @@ class PostsStore:
                 items.append(Post(**obj))
             except Exception:
                 continue
+        print(f"[STORE] Loaded posts count={len(items)}")
         if status:
+            print(f"[STORE] Filtering by status={status}")
             items = [p for p in items if p.status == status]
+            print(f"[STORE] Filtered posts count={len(items)}")
         return items
 
     @staticmethod
     def get_by_id(post_id: str) -> Optional[Post]:
+        print(f"[STORE] PostsStore.get_by_id called with id={post_id}")
         items = PostsStore.get_all()
         for p in items:
             if p.id == post_id:
+                print("[STORE] Post found by id")
                 return p
+        print("[STORE] Post not found by id")
         return None
 
     @staticmethod
     def upsert(post: Post) -> Post:
+        print(f"[STORE] PostsStore.upsert called for id={post.id}")
         items = PostsStore.get_all()
         for i, p in enumerate(items):
             if p.id == post.id:
+                print("[STORE] Existing post found. Updating in-place.")
                 items[i] = post
                 break
         else:
+            print("[STORE] New post. Inserting at beginning.")
             items.insert(0, post)
         # Serialize datetimes as ISO
         data = [json.loads(i.model_dump_json()) for i in items]
         _write_json(POSTS_PATH, data)
+        print("[STORE] Upsert complete.")
         return post
 
     @staticmethod
     def update_fields(post_id: str, patch: Dict[str, Any]) -> Optional[Post]:
+        print(f"[STORE] PostsStore.update_fields called id={post_id} patch_keys={list(patch.keys())}")
         items = PostsStore.get_all()
         for i, p in enumerate(items):
             if p.id == post_id:
@@ -82,7 +100,9 @@ class PostsStore:
                 items[i] = updated
                 data = [json.loads(x.model_dump_json()) for x in items]
                 _write_json(POSTS_PATH, data)
+                print("[STORE] Update fields complete.")
                 return updated
+        print("[STORE] Post to update not found.")
         return None
 
 

@@ -26,6 +26,7 @@ def _random_of(arr: List[str]) -> str:
 
 
 def _stub_generate(existing_ideas: List[str], topic: Optional[str]) -> Dict[str, str]:
+    print("[LLM] Using stub generator for post idea.")
     topic = topic or _random_of(TOPICS)
     title = _random_of([
         f"Thoughts on {topic}",
@@ -41,7 +42,9 @@ def _stub_generate(existing_ideas: List[str], topic: Optional[str]) -> Dict[str,
 
 
 def generate_post_idea(*, existing_ideas: List[str], topic: Optional[str] = None, research_snippets: Optional[List[str]] = None) -> Dict[str, str]:
+    print(f"[LLM] generate_post_idea called. existing_ideas_count={len(existing_ideas)}, topic={topic!r}, research_snippets_count={len(research_snippets or [])}")
     if not settings.anthropic_api_key:
+        print("[LLM] No Anthropic API key. Falling back to stub generator.")
         return _stub_generate(existing_ideas, topic)
 
     used_ideas = [x for x in existing_ideas if x][:20]
@@ -61,6 +64,7 @@ def generate_post_idea(*, existing_ideas: List[str], topic: Optional[str] = None
     prompt = "\n".join(prompt_lines)
 
     try:
+        print("[LLM] Requesting Anthropic messages API for idea generation...")
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
             json={
@@ -82,6 +86,7 @@ def generate_post_idea(*, existing_ideas: List[str], topic: Optional[str] = None
         text = content[0].get("text") if content else None
         if text:
             try:
+                print("[LLM] Parsing JSON response from Anthropic...")
                 parsed = json.loads(text)
                 return {
                     "name": str(parsed.get("name", "")),
@@ -91,9 +96,10 @@ def generate_post_idea(*, existing_ideas: List[str], topic: Optional[str] = None
                     "image": str(parsed.get("image", parsed.get("title") or parsed.get("idea") or "Abstract tech illustration")),
                 }
             except Exception:
+                print("[LLM] Failed to parse JSON from Anthropic response. Falling back to stub.")
                 pass
     except Exception:
-        pass
+        print("[LLM] Exception during Anthropic request. Falling back to stub.")
 
     return _stub_generate(existing_ideas, topic)
 

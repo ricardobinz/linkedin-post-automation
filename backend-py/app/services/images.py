@@ -11,11 +11,16 @@ def _safe_keyword(s: str) -> str:
 
 
 def generate_image(description: str) -> str:
+    print(f"[IMAGES] generate_image called with description length={len(description) if description else 0}")
     if not settings.openai_api_key:
+        print("[IMAGES] No OpenAI API key. Using placeholder image (picsum).")
         seed = _safe_keyword(description)
-        return f"https://picsum.photos/seed/{requests.utils.quote(seed + '-lg')}/800/450"
+        url = f"https://picsum.photos/seed/{requests.utils.quote(seed + '-lg')}/800/450"
+        print(f"[IMAGES] Placeholder URL={url}")
+        return url
 
     try:
+        print("[IMAGES] Requesting image from OpenAI Images API...")
         resp = requests.post(
             "https://api.openai.com/v1/images/generations",
             json={
@@ -35,9 +40,12 @@ def generate_image(description: str) -> str:
         data = resp.json()
         url = (data.get("data") or [{}])[0].get("url")
         if url:
+            print(f"[IMAGES] Received URL from OpenAI: {url}")
             return url
     except Exception:
-        pass
+        print("[IMAGES] Exception calling OpenAI Images API. Falling back to placeholder.")
 
     seed = _safe_keyword(description)
-    return f"https://picsum.photos/seed/{requests.utils.quote(seed + '-lg')}/800/450"
+    url = f"https://picsum.photos/seed/{requests.utils.quote(seed + '-lg')}/800/450"
+    print(f"[IMAGES] Fallback placeholder URL={url}")
+    return url

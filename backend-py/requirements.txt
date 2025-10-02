@@ -1,10 +1,10 @@
 fastapi==0.115.0
-uvicorn[standard]==0.31.1
+uvicorn==0.31.1
 pydantic==2.9.2
 pydantic-settings==2.6.0
 python-dotenv==1.0.1
 requests==2.32.3
-langchain==0.2.14
-langchain-core==0.2.35
-langchain-anthropic==0.2.2
-langgraph==0.2.39
+langgraph
+langchain-core
+langchain-anthropic
+anthropic

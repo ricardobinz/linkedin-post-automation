@@ -4,8 +4,6 @@ from typing import List, Optional, Dict, Tuple
 from ..config import settings
 from .llm import generate_post_idea as direct_generate_post_idea
 from .research import research_brief
-from langchain_core.pydantic_v1 import BaseModel, Field
-
 
 def generate_post_idea_react(*, existing_ideas: List[str], topic: Optional[str] = None) -> Dict[str, str]:
     """
@@ -14,8 +12,11 @@ def generate_post_idea_react(*, existing_ideas: List[str], topic: Optional[str] 
     Falls back to the direct generator if LangChain is unavailable.
     Returns a dict with keys: name, idea, title, text, image
     """
+    print("[AGENT] generate_post_idea_react called")
+    print(f"[AGENT] Inputs: existing_ideas_count={len(existing_ideas)}, topic={topic!r}")
     # Fallback if Anthropic key is missing or LangChain isn't installed
     if not settings.anthropic_api_key:
+        print("[AGENT] No Anthropic API key. Using direct generator fallback with optional research.")
         rb = research_brief(topic) if topic else ""
         return direct_generate_post_idea(existing_ideas=existing_ideas, topic=topic, research_snippets=([rb] if rb else []))
 
@@ -25,8 +26,16 @@ def generate_post_idea_react(*, existing_ideas: List[str], topic: Optional[str] 
         from langchain_core.tools import Tool
         from langchain_core.messages import SystemMessage, HumanMessage
         from langchain_anthropic import ChatAnthropic
-    except Exception:
-        # LangChain not available; fall back
+        # Use pydantic directly (v2) instead of LangChain's pydantic shim
+        from pydantic import BaseModel, Field
+    except ImportError as e:
+        # LangChain not available; fall back but include error details
+        print(f"[AGENT] ImportError during LangChain/Anthropic setup: {e!r}. Falling back to direct generator.")
+        rb = research_brief(topic) if topic else ""
+        return direct_generate_post_idea(existing_ideas=existing_ideas, topic=topic, research_snippets=([rb] if rb else []))
+    except Exception as e:
+        # Unexpected error during import block
+        print(f"[AGENT] Unexpected exception during LangChain/Anthropic setup: {e!r}. Falling back to direct generator.")
         rb = research_brief(topic) if topic else ""
         return direct_generate_post_idea(existing_ideas=existing_ideas, topic=topic, research_snippets=([rb] if rb else []))
 
@@ -47,6 +56,7 @@ def generate_post_idea_react(*, existing_ideas: List[str], topic: Optional[str] 
         return chosen, counts
 
     bucket, _bucket_counts = _least_used_bucket(existing_ideas)
+    print(f"[AGENT] Selected bucket: {bucket} from counts={_bucket_counts}")
 
     # LLM (Anthropic via LangChain)
     llm = ChatAnthropic(
@@ -70,7 +80,9 @@ def generate_post_idea_react(*, existing_ideas: List[str], topic: Optional[str] 
     # Research tool (Perplexity wrapped as a simple tool)
     def _perplexity_tool(query: str) -> str:
         """Call this tool to make a web search query using Perplexity AI. It will automatically look at multiple relevant websites and combine all the valuable information in one clean response."""
+        print(f"[AGENT] Research tool invoked with query={query!r}")
         text = research_brief(query)
+        print(f"[AGENT] Research tool result length={len(text) if text else 0}")
         return text or ""
 
     research_tool = Tool(
@@ -120,12 +132,14 @@ def generate_post_idea_react(*, existing_ideas: List[str], topic: Optional[str] 
 
     try:
         # Agent will decide if/when to call research tool
+        print("[AGENT] Invoking ReAct agent...")
         result = agent.invoke({
             "messages": [
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=task_prompt),
             ]
         })
+        print("[AGENT] Agent invocation complete. Parsing output...")
         # Try to extract a structured dict first
         # LangGraph agent returns a dict with messages; when using structured output, the final content
         # is typically already a dict that matches the schema.
@@ -135,11 +149,14 @@ def generate_post_idea_react(*, existing_ideas: List[str], topic: Optional[str] 
             content = getattr(last, "content", None) if last is not None else None
             # If content is already a dict with required keys, return it directly
             if isinstance(content, dict) and all(k in content for k in ("name", "idea", "title", "text", "image")):
+                print("[AGENT] Parsed structured dict content directly from agent messages.")
                 return content  # type: ignore[return-value]
             # If content is a list of blocks, try to find a dict among them
             if isinstance(content, list):
+                print("[AGENT] Content is a list. Scanning for dict block...")
                 for c in content:
                     if isinstance(c, dict) and all(k in c for k in ("name", "idea", "title", "text", "image")):
+                        print("[AGENT] Found dict block inside list content.")
                         return c  # type: ignore[return-value]
                 # Otherwise join text blocks and attempt JSON parse
                 import json, re
@@ -151,36 +168,44 @@ def generate_post_idea_react(*, existing_ideas: List[str], topic: Optional[str] 
                         parts.append(str(c))
                 text = "".join(parts)
                 try:
+                    print("[AGENT] Attempting JSON parse from concatenated text blocks...")
                     return json.loads(text)
                 except Exception:
                     match = re.search(r"\{[\s\S]*\}", text)
                     if match:
+                        print("[AGENT] Extracted JSON object via regex from text blocks.")
                         return json.loads(match.group(0))
                     raise
             # If content is a string, try to parse JSON from it
             if isinstance(content, str):
                 import json, re
                 try:
+                    print("[AGENT] Content is string. Attempting direct JSON parse...")
                     return json.loads(content)
                 except Exception:
                     match = re.search(r"\{[\s\S]*\}", content)
                     if match:
+                        print("[AGENT] Extracted JSON object via regex from string content.")
                         return json.loads(match.group(0))
                     raise
         # If result isn't the typical dict form, attempt direct cast
         if isinstance(result, dict) and all(k in result for k in ("name", "idea", "title", "text", "image")):
+            print("[AGENT] Result appears to be a dict with required keys. Returning as-is.")
             return result  # type: ignore[return-value]
         # Final fallback: stringification + JSON extraction
         import json, re
         text = str(result)
         try:
+            print("[AGENT] Attempting JSON parse from stringified result...")
             return json.loads(text)
         except Exception:
             match = re.search(r"\{[\s\S]*\}", text)
             if match:
+                print("[AGENT] Extracted JSON via regex from stringified result.")
                 return json.loads(match.group(0))
             raise
     except Exception:
         # Fall back to direct generator
+        print("[AGENT] Exception during agent execution. Falling back to direct generator.")
         rb = research_brief(topic) if topic else ""
         return direct_generate_post_idea(existing_ideas=existing_ideas, topic=topic, research_snippets=([rb] if rb else []))

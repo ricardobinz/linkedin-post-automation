@@ -28,16 +28,25 @@ def get_post(post_id: str) -> Post:
 
 @router.post("/generate", status_code=status.HTTP_201_CREATED)
 def generate_post(payload: Optional[GenerateRequest] = Body(default=None)) -> Post:
+    print("[POSTS] /posts/generate called")
     existing = PostsStore.get_all()
+    print(f"[POSTS] Loaded existing posts: count={len(existing)}")
     existing_ideas = [p.idea or "" for p in existing if p.idea]
+    print(f"[POSTS] Extracted existing ideas: count={len(existing_ideas)}")
 
     topic = payload.topic if payload else None
+    print(f"[POSTS] Topic from payload: {topic!r}")
     # Use ReAct agent (LangChain + Anthropic + Perplexity tool). Falls back automatically if unavailable.
+    print("[POSTS] Generating post idea via agent...")
     idea = generate_post_idea_react(existing_ideas=existing_ideas, topic=topic)
+    print(f"[POSTS] Idea generated with keys: {list(idea.keys())}")
 
+    print("[POSTS] Generating image from prompt...")
     image_url = generate_image(idea["image"])
+    print(f"[POSTS] Image generated: url={image_url}")
 
     now = datetime.utcnow()
+    print("[POSTS] Constructing Post draft object...")
     draft = Post(
         id=new_id(),
         name=idea.get("name") or "",
@@ -51,7 +60,9 @@ def generate_post(payload: Optional[GenerateRequest] = Body(default=None)) -> Po
         updatedAt=now,
     )
 
+    print(f"[POSTS] Saving draft post id={draft.id} to store...")
     PostsStore.upsert(draft)
+    print(f"[POSTS] Draft saved. Returning response for id={draft.id}")
     return draft
 
 

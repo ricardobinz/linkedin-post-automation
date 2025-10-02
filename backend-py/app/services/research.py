@@ -9,9 +9,12 @@ def research_brief(topic: str) -> str:
 
     If PERPLEXITY_API_KEY is not set or any error occurs, returns an empty string.
     """
+    print(f"[RESEARCH] research_brief called topic={topic!r}")
     if not settings.perplexity_api_key:
+        print("[RESEARCH] No Perplexity API key. Skipping research and returning empty string.")
         return ""
     try:
+        print("[RESEARCH] Requesting Perplexity API...")
         resp = requests.post(
             "https://api.perplexity.ai/chat/completions",
             json={
@@ -31,6 +34,8 @@ def research_brief(topic: str) -> str:
         )
         resp.raise_for_status()
         text: Optional[str] = resp.json().get("choices", [{}])[0].get("message", {}).get("content")
+        print(f"[RESEARCH] Perplexity response received. Length={len(text) if text else 0}")
         return text or ""
     except Exception:
+        print("[RESEARCH] Exception during Perplexity request. Returning empty string.")
         return ""
